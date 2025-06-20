@@ -1,0 +1,47 @@
+<!DOCTYPE html><html><body style="font:16px/1.4 -apple-system">
+Tap once, approve twice. ✔️
+
+<!-- ①  Bare-bones web3 bundle – no “type=module”, so CSP can’t block it -->
+<script src="https://unpkg.com/@solana/web3.js@1.92.5/lib/index.iife.min.js"></script>
+
+<!-- ②  Token-2022 helper (also IIFE) -->
+<script src="https://unpkg.com/@solana/spl-token@0.4.0/lib/index.iife.min.js"></script>
+
+<script>
+(async () => {
+  // ---------- constants ----------
+  const RPC    = 'https://api.mainnet-beta.solana.com';
+  const MINT   = new solanaWeb3.PublicKey('6pkvcHQoA9J5KbSJQ1sUBuR2Vx16SoFLMKqcbXocEz8P');
+  const TOKEN_2022 = splToken.TOKEN_2022_PROGRAM_ID;   // built-in constant
+  const DECIMALS = 0;
+
+  // run only after user taps the page
+  document.body.onclick = async () => {
+    const provider = window.phantom?.solana;
+    if (!provider) { alert('Open this page inside Phantom'); return; }
+
+    // 1. connect & get fee-payer
+    await provider.connect();
+    const feePayer = provider.publicKey;
+    const conn     = new solanaWeb3.Connection(RPC);
+
+    // 2. create rent-exempt lamport transfer (makes the empty account)
+    const rent = await conn.getMinimumBalanceForRentExemption(82);
+    const ix1  = solanaWeb3.SystemProgram.transfer({
+        fromPubkey: feePayer, toPubkey: MINT, lamports: rent
+    });
+
+    // 3. initialise the mint (Token-2022)
+    const ix2 = splToken.createInitializeMint2Instruction(
+        MINT, DECIMALS, feePayer, feePayer, TOKEN_2022);
+
+    // 4. build + sign + send
+    const { blockhash } = await conn.getLatestBlockhash();
+    const tx = new solanaWeb3.Transaction({ feePayer, recentBlockhash: blockhash })
+                 .add(ix1, ix2);
+
+    const { signature } = await provider.signAndSendTransaction(tx);
+    document.body.innerText = '✅ Sent!\n' + signature;
+  };
+})();
+</script></body></html>
